@@ -1,0 +1,19 @@
+{
+  "name": "wtf-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "dependencies": {
+    "@slack/bolt": "^3.4.1",
+    "axios": "^0.21.1",
+    "dotenv": "^10.0.0",
+    "ngrok": "^4.0.1",
+    "slackbots": "^1.2.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
