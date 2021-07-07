@@ -19,7 +19,44 @@ app.message('WTF is ', async ({ message, say }) => {
     resp = await getDefinition(search_term.toLowerCase());
 
     if (resp.status == 200){
-      await say(resp.data.description);
+      // await say(resp.data.description);
+
+      await say({
+        blocks: [
+          {
+            "type": "section",
+            "text": {
+              "type": "plain_text",
+              "text": resp.data.description
+            },
+          }, 
+          {
+            "type": "actions",
+            // "block_id": "add_term",
+            "elements": [
+              {
+                "type": "button",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Update"
+                },
+                "style": "primary",
+                "action_id": "update_term"
+              },
+              {
+                "type": "button",
+                "text": {
+                  "type": "plain_text",
+                  "text": "Delete"
+                },
+                "style": "danger",
+                "action_id": "delete_term"
+              } 
+            ]
+          }
+        ],
+        text: resp.data.description
+      });
     }
   } catch (err) {
     if (err.response.status == 404) {
@@ -67,12 +104,90 @@ app.action('add_term-action', async ({ body, ack, respond, action }) => {
   await respond(`${word} has been added!`);
 });
 
-(async () => {
-  // Start your app
-  await app.start(process.env.PORT || 3000);
 
-  console.log('⚡️ Bolt app is running!');
-})();
+app.action('update_term', async ({ ack, body, client }) => {
+  // Acknowledge the button request
+  await ack();
+
+  console.log(body);
+  console.log('====================');
+
+  try {
+    // Call views.update with the built-in client
+    const result = await client.views.open({
+      // Pass the trigger id
+      trigger_id: body.trigger_id,
+
+      // View payload with updated blocks
+      view: {
+        type: 'modal',
+        // View identifier
+        callback_id: 'update_term_modal',
+        title: {
+          type: 'plain_text',
+          text: 'Update term'
+        },
+        blocks: [
+          {
+            type: 'input',
+            block_id: 'input_c',
+            label: {
+              type: 'plain_text',
+              text: 'Add a new definition below:'
+            },
+            element: {
+              type: 'plain_text_input',
+              action_id: 'dreamy_input',
+              multiline: true
+            }
+          }
+        ],
+        submit: {
+          type: 'plain_text',
+          text: 'Submit'
+        }
+      }
+    });
+    console.log(result);
+  }
+  catch (error) {
+    console.error(error);
+  }
+});
+
+
+app.view('update_term_modal', async ({body, ack, payload }) => {
+  ack({
+    "response_action": "update",
+    "view": {
+      "type": "modal",
+      "title": {
+        "type": "plain_text",
+        "text": "Updated view"
+      },
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "plain_text",
+            "text": "I've changed and I'll never be the same. You must believe me."
+          }
+        }
+      ]
+    }
+  });
+
+  const submittedValues = body.view.state.values
+  console.log("---------------");
+
+  console.log(payload);
+  console.log("---------------");
+  console.log(body);
+  console.log("---------------");
+  console.log(submittedValues)
+  // do stuff with submittedValues
+});
+
 
 
 
@@ -100,3 +215,11 @@ async function createDefinition(word, author, description) {
     }
   }).then(res => res);
 }
+
+
+(async () => {
+  // Start your app
+  await app.start(process.env.PORT || 3000);
+
+  console.log('⚡️ Bolt app is running!');
+})();
