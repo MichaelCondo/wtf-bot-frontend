@@ -123,12 +123,6 @@ app.action('update_term', async ({ ack, body, client, payload, action }) => {
   // Acknowledge the button request
   await ack();
 
-  console.log('+++++++++++++++++++++');
-  console.log(body);
-  console.log(payload);
-  console.log(action);
-  console.log('/////////////////////');
-
   const result = extractRecordId(payload.block_id);
   const id = result.id;
   const word = result.word;
