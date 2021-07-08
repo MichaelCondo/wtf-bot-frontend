@@ -8,6 +8,21 @@ const app = new App({
   signingSecret: process.env.SLACK_SIGNING_SECRET
 });
 
+app.message(new RegExp('help', "i"), async ({ message, say }) => {
+  await say({
+    blocks: [
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": 'If you type "WTF is X", I can look that up for you! Ex. wtf is brand media.'
+        }
+      }
+    ]
+  });
+});
+
+
 // Listens to incoming messages that contain "hello"
 app.message(new RegExp(triggerKeyword, "i"), async ({ message, say }) => {
   // Extract search term
@@ -30,8 +45,8 @@ app.message(new RegExp(triggerKeyword, "i"), async ({ message, say }) => {
           {
             "type": "section",
             "text": {
-              "type": "plain_text",
-              "text": resp.data.description
+              "type": "mrkdwn",
+              "text": "*" + search_term + "*: " + resp.data.description
             },
           }, 
           {
@@ -108,15 +123,91 @@ app.action('add_term-action', async ({ body, ack, respond, action }) => {
   await respond(`${word} has been added!`);
 });
 
-app.action('delete_term', async ({ body, ack, respond, action }) => {
-  // Acknowledge the action
+app.action('delete_term', async ({ body, ack, client, action, payload, respond }) => {
+
   await ack();
-  const result = extractRecordId(action.block_id);
+
+  const result = extractRecordId(payload.block_id);
   const id = result.id;
   const word = result.word;
+  console.log("Record ID is: " + id);
+
+  try {
+    // Call views.update with the built-in client
+    const result = await client.views.open({
+      // Pass the trigger id
+      trigger_id: body.trigger_id,
+
+      // View payload with updated blocks
+      view: {
+        type: 'modal',
+        // View identifier
+        callback_id: 'delete_term_modal',
+        title: {
+          type: 'plain_text',
+          text: "Are you sure?"
+        },
+        blocks: [
+          {
+            "type": "section",
+            "block_id": 'delete_modal #' + id + '#' + word,
+            "text": {
+              "type": "mrkdwn",
+              "text": "This will permanently delete the definition for *" + word + "*. This cannot be undone."
+            }
+          }
+        ],
+        submit: {
+          type: 'plain_text',
+          text: 'Confirm'
+        },
+        close: {
+          "type": "plain_text",
+          "text": "Cancel"
+        },
+        
+      }
+    });
+    console.log(result);
+  }
+  catch (error) {
+    console.error(error);
+  }
+});
+
+app.view('delete_term_modal', async ({ack, payload }) => {
+  const block_id = payload.blocks[0].block_id;
+  const result = extractRecordId(block_id);
+  const id = result.id;
+  const word = result.word;
+  console.log(payload);
+
+  ack({
+    "response_action": "update",
+    "view": {
+      "callback_id": 'delete_term_success',
+      "type": "modal",
+      "title": {
+        "type": "plain_text",
+        "text": "Deleted " + word
+      },
+      "blocks": [
+        {
+          "type": "section",
+          "text": {
+            "type": "plain_text",
+            "text": word + " has changed and it will never be the same. You must believe me."
+          }
+        }
+      ],
+      close: {
+        "type": "plain_text",
+        "text": "Close"
+      }
+    }
+  });
 
   await deleteDefinition(id);
-  await respond(`${word} has been deleted.`);
 });
 
 app.action('update_term', async ({ ack, body, client, payload, action }) => {
@@ -197,7 +288,11 @@ app.view('update_term_modal', async ({body, ack, payload }) => {
             "text": word + " has changed and it will never be the same. You must believe me."
           }
         }
-      ]
+      ],
+      close: {
+        "type": "plain_text",
+        "text": "Close"
+      },
     }
   });
 
@@ -271,3 +366,40 @@ function extractRecordId(block_id) {
 
   console.log('⚡️ Bolt app is running!');
 })();
+
+
+
+
+
+
+
+
+
+// {
+// 	"type": "modal",
+// 	"title": {
+// 		"type": "plain_text",
+// 		"text": "My App",
+// 		"emoji": true
+// 	},
+// 	"submit": {
+// 		"type": "plain_text",
+// 		"text": "Submit",
+// 		"emoji": true
+// 	},
+// 	"close": {
+// 		"type": "plain_text",
+// 		"text": "Cancel",
+// 		"emoji": true
+// 	},
+// 	"blocks": [
+// 		{
+// 			"type": "header",
+// 			"text": {
+// 				"type": "plain_text",
+// 				"text": "This is a header block",
+// 				"emoji": true
+// 			}
+// 		}
+// 	]
+// }
