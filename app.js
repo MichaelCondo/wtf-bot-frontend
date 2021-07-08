@@ -1,5 +1,6 @@
 const { App } = require('@slack/bolt');
 const axios = require('axios');
+const BACKEND_SERVER = "http://localhost:3001/api/v1/entries";
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -21,6 +22,8 @@ app.message('WTF is ', async ({ message, say }) => {
     if (resp.status == 200){
       // await say(resp.data.description);
 
+      console.log(resp.data);
+
       await say({
         blocks: [
           {
@@ -32,7 +35,7 @@ app.message('WTF is ', async ({ message, say }) => {
           }, 
           {
             "type": "actions",
-            // "block_id": "add_term",
+            "block_id": "add_term #" + resp.data.id,
             "elements": [
               {
                 "type": "button",
@@ -100,7 +103,7 @@ app.action('add_term-action', async ({ body, ack, respond, action }) => {
   await ack();
   word = body.message.text.substring(0, body.message.text.search(/ not found,/));
 
-  await createDefinition(word.toLowerCase(), body.user.username, action.value)
+  await createDefinition(word.toLowerCase(), body.user.username, action.value);
   await respond(`${word} has been added!`);
 });
 
@@ -109,8 +112,14 @@ app.action('update_term', async ({ ack, body, client }) => {
   // Acknowledge the button request
   await ack();
 
-  console.log(body);
-  console.log('====================');
+  // console.log(body);
+  // console.log('====================');
+  // console.log(body.message.blocks);
+  // console.log(body.actions.block_id);
+  // console.log(body.actions[0].block_id);
+
+  const recordId = extractRecordId(body.actions[0].block_id);
+  console.log("Record ID is: " + recordId);
 
   try {
     // Call views.update with the built-in client
@@ -130,14 +139,14 @@ app.action('update_term', async ({ ack, body, client }) => {
         blocks: [
           {
             type: 'input',
-            block_id: 'input_c',
+            block_id: 'update_modal #' + recordId,
             label: {
               type: 'plain_text',
               text: 'Add a new definition below:'
             },
             element: {
               type: 'plain_text_input',
-              action_id: 'dreamy_input',
+              action_id: 'modal_input',
               multiline: true
             }
           }
@@ -157,6 +166,14 @@ app.action('update_term', async ({ ack, body, client }) => {
 
 
 app.view('update_term_modal', async ({body, ack, payload }) => {
+  // console.log("///////////////////////////");
+  // console.log(body);
+  // console.log(payload);
+  // console.log("///////////////////////////");
+  const block_id = payload.blocks[0].block_id;
+  const recordId = extractRecordId(block_id);
+  console.log("Record ID is: " + recordId);
+
   ack({
     "response_action": "update",
     "view": {
@@ -178,22 +195,23 @@ app.view('update_term_modal', async ({body, ack, payload }) => {
   });
 
   const submittedValues = body.view.state.values
-  console.log("---------------");
+  // console.log("---------------");
 
-  console.log(payload);
-  console.log("---------------");
-  console.log(body);
-  console.log("---------------");
+  // // console.log(payload);
+  // // console.log("---------------");
+  // // console.log(body);
+  // // console.log("---------------");
   console.log(submittedValues)
   // do stuff with submittedValues
+  await updateDefinition(body.user.username, submittedValues[block_id].modal_input.value, recordId);
+  // await respond(`${word} has been added!`);
 });
 
 
 
 
 async function getDefinition(word) {
-  RAILS_APP_SERVER = "http://localhost:3001/api/v1/entries";
-  targetUrl = RAILS_APP_SERVER+"?word="+word;
+  targetUrl = BACKEND_SERVER+"?word="+word;
 
   return axios({
     method: "get",
@@ -202,8 +220,7 @@ async function getDefinition(word) {
 }
 
 async function createDefinition(word, author, description) {
-  RAILS_APP_SERVER = "http://localhost:3001/api/v1/entries";
-  targetUrl = RAILS_APP_SERVER;
+  targetUrl = BACKEND_SERVER;
 
   return axios({
     method: "post",
@@ -214,6 +231,23 @@ async function createDefinition(word, author, description) {
       description: description
     }
   }).then(res => res);
+}
+
+async function updateDefinition(author, description, id) {
+  targetUrl = BACKEND_SERVER + "/" + id;
+
+  return axios({
+    method: "patch",
+    url: targetUrl,
+    data: {
+      author: author,
+      description: description
+    }
+  }).then(res => res);
+}
+
+function extractRecordId(block_id) {
+  return block_id.split('#')[1];
 }
 
 
