@@ -1,6 +1,7 @@
 const { App } = require('@slack/bolt');
 const axios = require('axios');
 const BACKEND_SERVER = "http://localhost:3001/api/v1/entries";
+const triggerKeyword = 'WTF is ';
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -8,12 +9,12 @@ const app = new App({
 });
 
 // Listens to incoming messages that contain "hello"
-app.message('WTF is ', async ({ message, say }) => {
+app.message(new RegExp(triggerKeyword, "i"), async ({ message, say }) => {
   // Extract search term
-  triggerKeyword = "WTF is ";
   text = message.text;
-  search_term  = text.substring(triggerKeyword.length + text.search(new RegExp(triggerKeyword)));
+  search_term  = text.substring(triggerKeyword.length + text.search(new RegExp(triggerKeyword, "i"))).trim();
 
+  console.log(search_term);
   // Send GET to Rails server
   let resp = null;
   try {
@@ -35,7 +36,7 @@ app.message('WTF is ', async ({ message, say }) => {
           }, 
           {
             "type": "actions",
-            "block_id": "add_term #" + resp.data.id,
+            "block_id": "add_term #" + resp.data.id + '#' + search_term,
             "elements": [
               {
                 "type": "button",
@@ -107,19 +108,31 @@ app.action('add_term-action', async ({ body, ack, respond, action }) => {
   await respond(`${word} has been added!`);
 });
 
+app.action('delete_term', async ({ body, ack, respond, action }) => {
+  // Acknowledge the action
+  await ack();
+  const result = extractRecordId(action.block_id);
+  const id = result.id;
+  const word = result.word;
 
-app.action('update_term', async ({ ack, body, client }) => {
+  await deleteDefinition(id);
+  await respond(`${word} has been deleted.`);
+});
+
+app.action('update_term', async ({ ack, body, client, payload, action }) => {
   // Acknowledge the button request
   await ack();
 
-  // console.log(body);
-  // console.log('====================');
-  // console.log(body.message.blocks);
-  // console.log(body.actions.block_id);
-  // console.log(body.actions[0].block_id);
+  console.log('+++++++++++++++++++++');
+  console.log(body);
+  console.log(payload);
+  console.log(action);
+  console.log('/////////////////////');
 
-  const recordId = extractRecordId(body.actions[0].block_id);
-  console.log("Record ID is: " + recordId);
+  const result = extractRecordId(payload.block_id);
+  const id = result.id;
+  const word = result.word;
+  console.log("Record ID is: " + id);
 
   try {
     // Call views.update with the built-in client
@@ -134,20 +147,21 @@ app.action('update_term', async ({ ack, body, client }) => {
         callback_id: 'update_term_modal',
         title: {
           type: 'plain_text',
-          text: 'Update term'
+          text: "Update " + word
         },
         blocks: [
           {
             type: 'input',
-            block_id: 'update_modal #' + recordId,
+            block_id: 'update_modal #' + id + '#' + word,
             label: {
               type: 'plain_text',
-              text: 'Add a new definition below:'
+              text: 'Update the definition for ' + word + ' below:'
             },
             element: {
               type: 'plain_text_input',
               action_id: 'modal_input',
-              multiline: true
+              multiline: true,
+              initial_value: body.message.text
             }
           }
         ],
@@ -166,13 +180,12 @@ app.action('update_term', async ({ ack, body, client }) => {
 
 
 app.view('update_term_modal', async ({body, ack, payload }) => {
-  // console.log("///////////////////////////");
-  // console.log(body);
-  // console.log(payload);
-  // console.log("///////////////////////////");
+
   const block_id = payload.blocks[0].block_id;
-  const recordId = extractRecordId(block_id);
-  console.log("Record ID is: " + recordId);
+  const result = extractRecordId(block_id);
+  const id = result.id;
+  const word = result.word;
+  console.log("Record ID is: " + id);
 
   ack({
     "response_action": "update",
@@ -180,14 +193,14 @@ app.view('update_term_modal', async ({body, ack, payload }) => {
       "type": "modal",
       "title": {
         "type": "plain_text",
-        "text": "Updated view"
+        "text": "Updated " + word
       },
       "blocks": [
         {
           "type": "section",
           "text": {
             "type": "plain_text",
-            "text": "I've changed and I'll never be the same. You must believe me."
+            "text": word + " has changed and it will never be the same. You must believe me."
           }
         }
       ]
@@ -195,16 +208,10 @@ app.view('update_term_modal', async ({body, ack, payload }) => {
   });
 
   const submittedValues = body.view.state.values
-  // console.log("---------------");
 
-  // // console.log(payload);
-  // // console.log("---------------");
-  // // console.log(body);
-  // // console.log("---------------");
   console.log(submittedValues)
   // do stuff with submittedValues
-  await updateDefinition(body.user.username, submittedValues[block_id].modal_input.value, recordId);
-  // await respond(`${word} has been added!`);
+  await updateDefinition(body.user.username, submittedValues[block_id].modal_input.value, id);
 });
 
 
@@ -246,8 +253,21 @@ async function updateDefinition(author, description, id) {
   }).then(res => res);
 }
 
+async function deleteDefinition(id) {
+  targetUrl = BACKEND_SERVER + "/" + id;
+
+  return axios({
+    method: "delete",
+    url: targetUrl
+  }).then(res => res);
+}
+
 function extractRecordId(block_id) {
-  return block_id.split('#')[1];
+  result = block_id.split('#');
+  return {
+    id: result[1],
+    word: result[2]
+  };
 }
 
 
